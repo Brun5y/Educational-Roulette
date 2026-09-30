@@ -1,0 +1,583 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Educational Roulette</title>
+    <style>
+        :root {
+            --casino-green: #0b5e28;
+            --roulette-red: #d32f2f;
+            --roulette-black: #212121;
+            --text-light: #ffffff;
+            --highlight: #ffd700;
+        }
+        * {
+            box-sizing: border-box;
+            user-select: none;
+        }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--casino-green);
+            color: var(--text-light);
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        h1, h2 { text-align: center; }
+        .screen {
+            display: none;
+            width: 100%;
+            max-width: 900px;
+            background: rgba(0,0,0,0.4);
+            padding: 20px;
+            border-radius: 12px;
+        }
+        .active-screen { display: block; }
+        
+        button {
+            background-color: #333;
+            color: white;
+            border: 2px solid #555;
+            padding: 15px 20px;
+            margin: 10px;
+            font-size: 16px;
+            border-radius: 8px;
+            cursor: pointer;
+            width: calc(100% - 20px);
+            max-width: 300px;
+            transition: 0.2s;
+        }
+        button:hover { background-color: #444; }
+        button:active { transform: scale(0.98); }
+        button:disabled {
+            background-color: #222;
+            color: #777;
+            border-color: #333;
+            cursor: not-allowed;
+        }
+        
+        .menu-grid {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+        
+        #bank-display {
+            font-size: 24px;
+            font-weight: bold;
+            color: var(--highlight);
+            text-align: center;
+            margin-bottom: 20px;
+        }
+
+        /* Roulette Board CSS */
+        .board-wrapper {
+            display: flex;
+            flex-direction: row;
+            justify-content: center;
+            gap: 10px;
+            margin: 20px auto;
+            max-width: 600px;
+        }
+        
+        .outside-bets-container {
+            display: flex;
+            flex-direction: row;
+            gap: 5px;
+            margin-top: 55px;
+        }
+        
+        .outside-col {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+            width: 80px;
+        }
+        
+        .outside-cell {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            font-size: 14px;
+            font-weight: bold;
+            border: 2px solid white;
+            border-radius: 4px;
+            cursor: pointer;
+            padding: 5px;
+        }
+        
+        .inside-bets-container {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+            width: 200px;
+        }
+
+        .board-row {
+            display: flex;
+            gap: 5px;
+            justify-content: center;
+            height: 50px;
+        }
+        
+        .board-cell {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+            font-weight: bold;
+            border: 2px solid white;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        
+        .zero-cell { background-color: #388e3c; }
+        .red-cell { background-color: var(--roulette-red); }
+        .black-cell { background-color: var(--roulette-black); }
+        .neutral-cell { background-color: transparent; }
+        
+        .highlighted {
+            border: 4px solid var(--highlight) !important;
+            box-shadow: 0 0 10px var(--highlight);
+            transform: scale(1.05);
+            z-index: 10;
+        }
+
+        #split-controls {
+            display: none;
+            justify-content: center;
+            gap: 10px;
+            margin-bottom: 15px;
+            flex-wrap: wrap;
+        }
+
+        #wheel-container {
+            text-align: center;
+            margin: 30px 0;
+        }
+        .wheel-result {
+            font-size: 60px;
+            font-weight: bold;
+            width: 120px;
+            height: 120px;
+            line-height: 120px;
+            border-radius: 50%;
+            margin: 0 auto;
+            border: 5px solid gold;
+        }
+        
+        .controls-row {
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Main Menu -->
+    <div id="screen-main" class="screen active-screen">
+        <h1>Roulette Probability Simulator</h1>
+        <div class="menu-grid">
+            <button onclick="selectMode('intro')">Introduction to Roulette</button>
+            <button onclick="selectMode('mutual')">Mutual Exclusivity in Roulette</button>
+            <button onclick="selectMode('expected')">Expected Value in Roulette</button>
+            <button onclick="selectMode('conditional')">Conditional Probability in Roulette</button>
+            <button onclick="selectMode('sandbox')">Roulette Sandbox</button>
+        </div>
+        <div id="mode-description" style="display:none; text-align: center; margin-top: 20px;">
+            <p id="desc-text"></p>
+            <div class="controls-row">
+                <button onclick="beginGame()" style="background-color: var(--highlight); color: black;">Begin Game</button>
+                <button onclick="document.getElementById('mode-description').style.display='none'">Choose Another</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Intro: Bet Selection -->
+    <div id="screen-intro-bets" class="screen">
+        <h2>Introduction to Roulette</h2>
+        <p style="text-align:center;">Select a bet to learn how it works.</p>
+        <div id="bank-display-intro" style="text-align:center; font-size:20px; color:var(--highlight); margin-bottom:15px;">Bank: $10</div>
+        <div class="menu-grid" id="bet-buttons-container"></div>
+    </div>
+
+    <!-- Intro: Board Interaction -->
+    <div id="screen-board" class="screen">
+        <h2 id="current-bet-title">Bet Type</h2>
+        <div id="bank-display-board" style="text-align:center; font-size:20px; color:var(--highlight); margin-bottom:15px;">Bank: $10</div>
+        
+        <div id="split-controls">
+            <button id="btn-horizontal" onclick="setSplitMode('horizontal')">Horizontal Split</button>
+            <button id="btn-vertical" onclick="setSplitMode('vertical')">Vertical Split</button>
+        </div>
+
+        <div class="board-wrapper" id="board-container">
+            <!-- Left Side Outside Bets -->
+            <div class="outside-bets-container">
+                <!-- Outer Column -->
+                <div class="outside-col">
+                    <div class="outside-cell neutral-cell" id="out-1-18" onclick="handleOutsideClick('1 to 18 & 19 to 36', '1-18')">1 to 18</div>
+                    <div class="outside-cell neutral-cell" id="out-even" onclick="handleOutsideClick('Odd & Even', 'Even')">EVEN</div>
+                    <div class="outside-cell red-cell" id="out-red" onclick="handleOutsideClick('Red & Black', 'Red')">RED</div>
+                    <div class="outside-cell black-cell" id="out-black" onclick="handleOutsideClick('Red & Black', 'Black')">BLACK</div>
+                    <div class="outside-cell neutral-cell" id="out-odd" onclick="handleOutsideClick('Odd & Even', 'Odd')">ODD</div>
+                    <div class="outside-cell neutral-cell" id="out-19-36" onclick="handleOutsideClick('1 to 18 & 19 to 36', '19-36')">19 to 36</div>
+                </div>
+                <!-- Inner Column -->
+                <div class="outside-col">
+                    <div class="outside-cell neutral-cell" id="out-1st12" onclick="handleOutsideClick('Dozen', '1st12')">1st 12</div>
+                    <div class="outside-cell neutral-cell" id="out-2nd12" onclick="handleOutsideClick('Dozen', '2nd12')">2nd 12</div>
+                    <div class="outside-cell neutral-cell" id="out-3rd12" onclick="handleOutsideClick('Dozen', '3rd12')">3rd 12</div>
+                </div>
+            </div>
+
+            <!-- Inside Bets -->
+            <div class="inside-bets-container">
+                <div class="board-row">
+                    <div class="board-cell zero-cell" id="cell-0" onclick="handleCellClick(0)">0</div>
+                    <div class="board-cell zero-cell" id="cell-37" onclick="handleCellClick(37)">00</div>
+                </div>
+                <div id="numbers-grid-container"></div>
+            </div>
+        </div>
+
+        <div class="controls-row">
+            <button onclick="placeBet()" style="background-color: var(--highlight); color: black; font-weight: bold;">Place Bet</button>
+            <button onclick="showScreen('screen-intro-bets')">Back</button>
+        </div>
+    </div>
+
+    <!-- Intro: Wheel Spin Result -->
+    <div id="screen-wheel" class="screen">
+        <h2>Spinning...</h2>
+        <div id="wheel-container">
+            <div id="wheel-result" class="wheel-result red-cell">--</div>
+        </div>
+        <h3 id="spin-outcome-text" style="text-align: center;"></h3>
+        <div class="controls-row">
+            <button id="btn-next-bet" onclick="finishSpin()" style="display:none; background-color: var(--highlight); color: black;">Continue</button>
+        </div>
+    </div>
+
+    <script>
+        // State Variables
+        let bank = 10;
+        let activeMode = null;
+        let selectedBetType = null;
+        let completedBets = [];
+        let activeNumbers = [];
+        let splitMode = 'horizontal'; 
+        
+        const redNumbers = [1,3,5,7,9,12,14,16,18,19,21,23,25,27,30,32,34,36];
+        
+        const betTypes = [
+            { name: "Red & Black", payout: 1, default: redNumbers },
+            { name: "Odd & Even", payout: 1, default: getOddNumbers() },
+            { name: "1 to 18 & 19 to 36", payout: 1, default: getRange(1, 18) },
+            { name: "Dozen", payout: 2, default: getRange(1, 12) },
+            { name: "Column", payout: 2, default: getColumn(1) },
+            { name: "Double Street/Line", payout: 5, default: getRange(1, 6) },
+            { name: "Corner/Square", payout: 8, default: [1, 2, 4, 5] },
+            { name: "Street", payout: 11, default: [1, 2, 3] },
+            { name: "Split", payout: 17, default: [1, 2] },
+            { name: "Straight-Up", payout: 35, default: [1] }
+        ];
+
+        const descriptions = {
+            'intro': "An asynchronous activity meant to serve as an introduction to roulette where students will learn how the different bets in roulette work.",
+            'mutual': "An app that will help you conceptually visualize which bets in roulette are mutually exclusive with each other.",
+            'expected': "An app that will run simulations to help you estimate the expected values of various bets.",
+            'conditional': "An app that will run simulations to help you estimate the conditional probabilities of various bets.",
+            'sandbox': "An app that will let you bet as much as you want on roulette. The app will track your lifetime earnings (or losses)."
+        };
+
+        // Helpers
+        function getOddNumbers() { return Array.from({length: 36}, (_, i) => i + 1).filter(n => n % 2 !== 0); }
+        function getRange(start, end) { return Array.from({length: end - start + 1}, (_, i) => i + start); }
+        function getColumn(start) { return Array.from({length: 12}, (_, i) => start + (i * 3)); }
+        
+        function isRed(num) { return redNumbers.includes(num); }
+        function getColorClass(num) {
+            if (num === 0 || num === 37) return 'zero-cell';
+            return isRed(num) ? 'red-cell' : 'black-cell';
+        }
+        function getNumDisplay(num) { return num === 37 ? '00' : num.toString(); }
+
+        window.onload = () => {
+            buildNumbersGrid();
+        }
+
+        // Navigation
+        function showScreen(screenId) {
+            document.querySelectorAll('.screen').forEach(s => s.classList.remove('active-screen'));
+            document.getElementById(screenId).classList.add('active-screen');
+            document.getElementById('bank-display-intro').innerText = `Bank: $${bank}`;
+            document.getElementById('bank-display-board').innerText = `Bank: $${bank}`;
+        }
+
+        function selectMode(mode) {
+            activeMode = mode;
+            document.getElementById('mode-description').style.display = 'block';
+            document.getElementById('desc-text').innerText = descriptions[mode];
+        }
+
+        function beginGame() {
+            if (activeMode === 'intro') {
+                renderBetMenu();
+                showScreen('screen-intro-bets');
+            } else {
+                alert("This mode is currently under development.");
+            }
+        }
+
+        function renderBetMenu() {
+            const container = document.getElementById('bet-buttons-container');
+            container.innerHTML = '';
+            betTypes.forEach(bet => {
+                const btn = document.createElement('button');
+                btn.innerText = bet.name;
+                if (completedBets.includes(bet.name)) {
+                    btn.disabled = true;
+                } else {
+                    btn.onclick = () => setupBoard(bet);
+                }
+                container.appendChild(btn);
+            });
+        }
+
+        function buildNumbersGrid() {
+            const container = document.getElementById('numbers-grid-container');
+            container.innerHTML = '';
+            for (let r = 0; r < 12; r++) {
+                const row = document.createElement('div');
+                row.className = 'board-row';
+                for (let c = 1; c <= 3; c++) {
+                    const num = r * 3 + c;
+                    const cell = document.createElement('div');
+                    cell.className = `board-cell ${getColorClass(num)}`;
+                    cell.innerText = num;
+                    cell.id = `cell-${num}`;
+                    cell.onclick = () => handleCellClick(num);
+                    row.appendChild(cell);
+                }
+                container.appendChild(row);
+            }
+        }
+
+        function setupBoard(betConfig) {
+            selectedBetType = betConfig;
+            activeNumbers = [...betConfig.default];
+            document.getElementById('current-bet-title').innerText = betConfig.name;
+            
+            document.getElementById('split-controls').style.display = (betConfig.name === 'Split') ? 'flex' : 'none';
+            
+            showScreen('screen-board');
+            updateBoardHighlight();
+        }
+
+        function updateBoardHighlight() {
+            document.querySelectorAll('.board-cell, .outside-cell').forEach(cell => {
+                cell.classList.remove('highlighted');
+            });
+
+            activeNumbers.forEach(num => {
+                const cell = document.getElementById(`cell-${num}`);
+                if (cell) cell.classList.add('highlighted');
+            });
+
+            if (selectedBetType.name === '1 to 18 & 19 to 36') {
+                if (activeNumbers.length === 18 && activeNumbers.includes(1) && activeNumbers.includes(18)) {
+                    document.getElementById('out-1-18').classList.add('highlighted');
+                } else if (activeNumbers.length === 18 && activeNumbers.includes(19) && activeNumbers.includes(36)) {
+                    document.getElementById('out-19-36').classList.add('highlighted');
+                }
+            } else if (selectedBetType.name === 'Odd & Even') {
+                if (activeNumbers.length === 18 && activeNumbers.includes(1)) {
+                    document.getElementById('out-odd').classList.add('highlighted');
+                } else if (activeNumbers.length === 18 && activeNumbers.includes(2)) {
+                    document.getElementById('out-even').classList.add('highlighted');
+                }
+            } else if (selectedBetType.name === 'Red & Black') {
+                if (activeNumbers.length === 18 && activeNumbers.includes(1)) {
+                    document.getElementById('out-red').classList.add('highlighted');
+                } else if (activeNumbers.length === 18 && activeNumbers.includes(2)) {
+                    document.getElementById('out-black').classList.add('highlighted');
+                }
+            } else if (selectedBetType.name === 'Dozen') {
+                if (activeNumbers.length === 12 && activeNumbers.includes(1)) document.getElementById('out-1st12').classList.add('highlighted');
+                else if (activeNumbers.length === 12 && activeNumbers.includes(13)) document.getElementById('out-2nd12').classList.add('highlighted');
+                else if (activeNumbers.length === 12 && activeNumbers.includes(25)) document.getElementById('out-3rd12').classList.add('highlighted');
+            }
+        }
+
+        function setSplitMode(mode) {
+            splitMode = mode;
+            const smallest = Math.min(...activeNumbers);
+            handleCellClick(smallest); 
+        }
+
+        function handleOutsideClick(expectedType, val) {
+            if (selectedBetType.name !== expectedType) return;
+            
+            if (expectedType === '1 to 18 & 19 to 36') {
+                activeNumbers = (val === '1-18') ? getRange(1, 18) : getRange(19, 36);
+            } else if (expectedType === 'Dozen') {
+                if (val === '1st12') activeNumbers = getRange(1, 12);
+                if (val === '2nd12') activeNumbers = getRange(13, 24);
+                if (val === '3rd12') activeNumbers = getRange(25, 36);
+            } else if (expectedType === 'Red & Black') {
+                activeNumbers = (val === 'Red') ? [...redNumbers] : getRange(1, 36).filter(n => !isRed(n));
+            } else if (expectedType === 'Odd & Even') {
+                activeNumbers = (val === 'Odd') ? getOddNumbers() : getRange(1, 36).filter(n => n % 2 === 0);
+            }
+            updateBoardHighlight();
+        }
+
+        function handleCellClick(num) {
+            const type = selectedBetType.name;
+            const blocksZero = ['Red & Black', 'Odd & Even', '1 to 18 & 19 to 36', 'Dozen', 'Column', 'Double Street/Line', 'Corner/Square'];
+            if ((num === 0 || num === 37) && blocksZero.includes(type)) return;
+
+            switch (type) {
+                case 'Red & Black':
+                    activeNumbers = isRed(num) ? [...redNumbers] : getRange(1,36).filter(n => !isRed(n));
+                    break;
+                case 'Odd & Even':
+                    activeNumbers = (num % 2 !== 0) ? getOddNumbers() : getRange(1,36).filter(n => n % 2 === 0);
+                    break;
+                case '1 to 18 & 19 to 36':
+                    activeNumbers = (num <= 18) ? getRange(1, 18) : getRange(19, 36);
+                    break;
+                case 'Dozen':
+                    const d = Math.ceil(num / 12);
+                    activeNumbers = getRange((d - 1) * 12 + 1, d * 12);
+                    break;
+                case 'Column':
+                    const col = (num % 3 === 0) ? 3 : (num % 3);
+                    activeNumbers = getColumn(col);
+                    break;
+                case 'Straight-Up':
+                    activeNumbers = [num];
+                    break;
+                case 'Street':
+                    if (num === 0) {
+                        activeNumbers = [0, 1, 2];
+                    } else if (num === 37) {
+                        activeNumbers = [37, 2, 3];
+                    } else if (num === 2) {
+                        activeNumbers = [0, 37, 2];
+                    } else if (num === 1 || num === 3) {
+                        activeNumbers = [1, 2, 3];
+                    } else if (num >= 4 && num <= 36) {
+                        const r = Math.ceil(num / 3);
+                        activeNumbers = getRange((r - 1) * 3 + 1, r * 3);
+                    }
+                    break;
+                case 'Double Street/Line':
+                    let rowStart = Math.ceil(num / 3);
+                    if (rowStart === 12) rowStart = 11;
+                    activeNumbers = getRange((rowStart - 1) * 3 + 1, (rowStart + 1) * 3);
+                    break;
+                case 'Corner/Square':
+                    let cr = Math.ceil(num / 3);
+                    let cc = (num % 3 === 0) ? 3 : (num % 3);
+                    if (cc === 3) cc = 2;
+                    if (cr === 12) cr = 11;
+                    const tl = (cr - 1) * 3 + cc;
+                    activeNumbers = [tl, tl+1, tl+3, tl+4];
+                    break;
+                case 'Split':
+                    if (splitMode === 'horizontal') {
+                        if (num === 0 || num === 37) {
+                            activeNumbers = [0, 37];
+                        } else {
+                            let c = (num % 3 === 0) ? 3 : (num % 3);
+                            let partner = (c === 3) ? num - 1 : num + 1;
+                            activeNumbers = [Math.min(num, partner), Math.max(num, partner)];
+                        }
+                    } else {
+                        if (num >= 4 && num <= 36) {
+                            activeNumbers = [num - 3, num];
+                        } else if (num === 1) {
+                            activeNumbers = [0, 1];
+                        } else if (num === 2) {
+                            activeNumbers = [2, 5];
+                        } else if (num === 3) {
+                            activeNumbers = [37, 3]; 
+                        } else if (num === 0) {
+                            activeNumbers = [0, 2];
+                        } else if (num === 37) {
+                            activeNumbers = [37, 2];
+                        }
+                    }
+                    break;
+            }
+            updateBoardHighlight();
+        }
+
+        // Game Resolution
+        function placeBet() {
+            showScreen('screen-wheel');
+            const resEl = document.getElementById('wheel-result');
+            const outcomeEl = document.getElementById('spin-outcome-text');
+            const nextBtn = document.getElementById('btn-next-bet');
+            
+            resEl.innerText = '--';
+            resEl.className = 'wheel-result';
+            outcomeEl.innerText = '';
+            nextBtn.style.display = 'none';
+
+            let ticks = 0;
+            const spinInterval = setInterval(() => {
+                const rand = Math.floor(Math.random() * 38);
+                const val = rand === 37 ? 37 : rand;
+                resEl.innerText = getNumDisplay(val);
+                resEl.className = `wheel-result ${getColorClass(val)}`;
+                ticks++;
+                if (ticks > 20) {
+                    clearInterval(spinInterval);
+                    resolveBet(val);
+                }
+            }, 100);
+        }
+
+        function resolveBet(winningNum) {
+            const outcomeEl = document.getElementById('spin-outcome-text');
+            
+            if (activeNumbers.includes(winningNum)) {
+                const winnings = selectedBetType.payout;
+                bank += winnings;
+                outcomeEl.innerText = `You Won $${winnings}!`;
+                outcomeEl.style.color = '#4caf50';
+            } else {
+                bank -= 1;
+                outcomeEl.innerText = `You Lost $1.`;
+                outcomeEl.style.color = 'var(--roulette-red)';
+            }
+            
+            completedBets.push(selectedBetType.name);
+            document.getElementById('btn-next-bet').style.display = 'block';
+        }
+
+        function finishSpin() {
+            if (completedBets.length >= 10) {
+                alert(`Activity Complete! Your final bankroll is $${bank}.`);
+                completedBets = [];
+                bank = 10;
+                showScreen('screen-main');
+            } else {
+                renderBetMenu();
+                showScreen('screen-intro-bets');
+            }
+        }
+    </script>
+</body>
+</html>
