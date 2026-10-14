@@ -681,4 +681,130 @@
             document.getElementById('btn-next-bet').style.display = 'block';
         }
 
-        function
+        function finishIntroSpin() {
+            if (completedIntroBets.length >= 10) {
+                alert(`Activity Complete! Your final bankroll is $${bank}.`);
+                completedIntroBets = []; bank = 10;
+                showScreen('screen-main');
+            } else {
+                renderBetMenu();
+                showScreen('screen-intro-bets');
+            }
+        }
+
+        // --- Mutual Exclusivity Simulation Engine ---
+        function startSimulation() {
+            simCount = 0;
+            simResults = { aWin: 0, bWin: 0, bothWin: 0, eitherWin: 0, totalNet: 0 };
+            skipSimFlag = false;
+            showScreen('screen-simulation');
+            runNextSimStep();
+        }
+
+        function skipSimulation() {
+            skipSimFlag = true;
+        }
+
+        function runNextSimStep() {
+            if (simCount >= 100 || skipSimFlag) {
+                if (skipSimFlag) {
+                    while(simCount < 100) { performSingleSim(false); simCount++; }
+                }
+                showResultsTable();
+                return;
+            }
+            performSingleSim(true);
+            simCount++;
+            simInterval = setTimeout(runNextSimStep, 1000);
+        }
+
+        function performSingleSim(updateUI) {
+            const rand = Math.floor(Math.random() * 38);
+            const val = rand === 37 ? 37 : rand;
+            const wonA = activeNumbersA.includes(val);
+            const wonB = activeNumbersB.includes(val);
+            
+            let netSpin = 0;
+            if (wonA) { netSpin += betAConfig.payout; simResults.aWin++; } else { netSpin -= 1; }
+            if (wonB) { netSpin += betBConfig.payout; simResults.bWin++; } else { netSpin -= 1; }
+            
+            if (wonA && wonB) simResults.bothWin++;
+            if (wonA || wonB) simResults.eitherWin++;
+            
+            simResults.totalNet += netSpin;
+            bank += netSpin;
+            
+            if (updateUI) {
+                document.getElementById('sim-wheel-result').innerText = getNumDisplay(val);
+                document.getElementById('sim-wheel-result').className = `wheel-result ${getColorClass(val)}`;
+                document.getElementById('sim-spin-counter').innerText = `Spin: ${simCount + 1} / 100`;
+                
+                const outcomeEl = document.getElementById('sim-spin-outcome');
+                if (netSpin > 0) {
+                    outcomeEl.innerText = `You Won $${netSpin}!`;
+                    outcomeEl.style.color = '#4caf50';
+                } else if (netSpin < 0) {
+                    outcomeEl.innerText = `You Lost $${Math.abs(netSpin)}.`;
+                    outcomeEl.style.color = 'var(--roulette-red)';
+                } else {
+                    outcomeEl.innerText = `Broke Even ($0)`;
+                    outcomeEl.style.color = 'white';
+                }
+            }
+        }
+
+        // --- Mutual Exclusivity Formatting & Table Rendering ---
+        function formatBetString(name, nums) {
+            const arr = nums.map(n => getNumDisplay(n));
+            let numStr = "";
+            if (arr.length <= 2) numStr = arr.join(' & ');
+            else if (arr.length === 3) numStr = `${arr[0]}, ${arr[1]} & ${arr[2]}`;
+            else if (arr.length > 6) numStr = `${arr[0]}, ${arr[1]}...`; 
+            else numStr = arr.join(', ');
+            return `${name} ${numStr}`;
+        }
+
+        function showResultsTable() {
+            const tbody = document.getElementById('results-tbody');
+            tbody.innerHTML = '';
+            
+            const rowsData = [
+                { title: `Bet A: ${formatBetString(betAConfig.name, activeNumbersA)}`, count: simResults.aWin },
+                { title: `Bet B: ${formatBetString(betBConfig.name, activeNumbersB)}`, count: simResults.bWin },
+                { title: `P( A & B )`, count: simResults.bothWin },
+                { title: `P( A or B )`, count: simResults.eitherWin }
+            ];
+
+            rowsData.forEach(row => {
+                const tr = document.createElement('tr');
+                const tdTitle = document.createElement('td');
+                tdTitle.innerText = row.title;
+                const tdCount = document.createElement('td');
+                tdCount.innerText = row.count;
+                const tdProb = document.createElement('td');
+                // Format experimental probability to 3 decimal places
+                tdProb.innerText = (row.count / 100).toFixed(3);
+                
+                tr.appendChild(tdTitle);
+                tr.appendChild(tdCount);
+                tr.appendChild(tdProb);
+                tbody.appendChild(tr);
+            });
+            
+            const netDisplay = document.getElementById('results-net');
+            if (simResults.totalNet > 0) {
+                netDisplay.innerText = `Total Gain: +$${simResults.totalNet}`;
+                netDisplay.style.color = '#4caf50';
+            } else if (simResults.totalNet < 0) {
+                netDisplay.innerText = `Total Loss: -$${Math.abs(simResults.totalNet)}`;
+                netDisplay.style.color = 'var(--roulette-red)';
+            } else {
+                netDisplay.innerText = `Total Gain: $0 (Broke Even)`;
+                netDisplay.style.color = 'white';
+            }
+            
+            showScreen('screen-results');
+        }
+    </script>
+</body>
+</html>
