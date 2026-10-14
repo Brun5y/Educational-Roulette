@@ -217,7 +217,8 @@
         let betBConfig = null;
         let activeNumbersA = [];
         let activeNumbersB = [];
-        let lastMovedBet = 'A'; // Tracks which bet to move when clicking empty space
+        let lastMovedBet = 'A';
+        let currentDragBet = null; // Locks the bet being dragged so it doesn't swap mid-drag
 
         // Simulation State
         let simCount = 0;
@@ -361,7 +362,6 @@
             const b1 = betTypes.find(b => b.name === selectedMutualBets[0]);
             const b2 = betTypes.find(b => b.name === selectedMutualBets[1]);
             
-            // Bet A is the smaller bet (fewer default numbers)
             if (b1.default.length <= b2.default.length) {
                 betAConfig = b1; betBConfig = b2;
             } else {
@@ -370,7 +370,8 @@
             
             activeNumbersA = [...betAConfig.default];
             activeNumbersB = [...betBConfig.default];
-            lastMovedBet = 'A'; // Start moving the smaller bet by default
+            lastMovedBet = 'A'; 
+            currentDragBet = null;
             
             document.getElementById('current-bet-title').innerText = `${betAConfig.name} vs ${betBConfig.name}`;
             document.getElementById('split-controls').style.display = 
@@ -446,10 +447,28 @@
                     startCell = e.currentTarget;
                     currentPointerId = e.pointerId;
                     isDragging = false;
+                    currentDragBet = null;
                     
                     if (interactTimer) clearTimeout(interactTimer);
                     interactTimer = setTimeout(() => {
                         isDragging = true;
+                        
+                        // Lock the target bet at the start of the drag
+                        if (activeMode === 'mutual') {
+                            const cat = startCell.getAttribute('data-cat');
+                            if (cat === 'inside') {
+                                const num = parseInt(startCell.getAttribute('data-num'));
+                                const inA = activeNumbersA.includes(num);
+                                const inB = activeNumbersB.includes(num);
+                                if (inA && inB) currentDragBet = 'A';
+                                else if (inA) currentDragBet = 'A';
+                                else if (inB) currentDragBet = 'B';
+                                else currentDragBet = lastMovedBet;
+                            } else if (cat === 'outside') {
+                                currentDragBet = lastMovedBet;
+                            }
+                        }
+
                         if (navigator.vibrate) navigator.vibrate(30);
                         startCell.style.transform = "scale(0.9)";
                         setTimeout(() => { if(startCell) startCell.style.transform = ""; }, 150);
@@ -474,20 +493,23 @@
         window.addEventListener('pointerup', (e) => {
             if (e.pointerId !== currentPointerId) return;
             if (interactTimer) { clearTimeout(interactTimer); interactTimer = null; }
-            if (isDragging) { isDragging = false; }
-            else if (startCell) {
+            if (isDragging) { 
+                isDragging = false; 
+            } else if (startCell) {
+                // Was a quick tap, so apply interaction without a locked bet
                 const el = document.elementFromPoint(e.clientX, e.clientY);
                 const targetCell = el ? el.closest('.board-cell, .outside-cell') : null;
                 if (targetCell === startCell) applyInteractionFromElement(startCell);
             }
             startCell = null;
             currentPointerId = null;
+            currentDragBet = null; // Clear lock
         });
 
         window.addEventListener('pointercancel', (e) => {
             if (e.pointerId !== currentPointerId) return;
             if (interactTimer) clearTimeout(interactTimer);
-            isDragging = false; startCell = null; currentPointerId = null;
+            isDragging = false; startCell = null; currentPointerId = null; currentDragBet = null;
         });
 
         function applyInteractionFromElement(el) {
@@ -504,7 +526,6 @@
 
         function setSplitMode(mode) {
             splitMode = mode;
-            // Recalculate based on smallest active number
             let smallest = 0;
             if (activeMode === 'intro') {
                 smallest = Math.min(...activeNumbers);
@@ -580,6 +601,9 @@
                 activeNumbers = getOutsideNumbers(type, val);
                 updateBoardHighlight();
             } else if (activeMode === 'mutual') {
+                if (currentDragBet === 'A' && betAConfig.name !== type) return;
+                if (currentDragBet === 'B' && betBConfig.name !== type) return;
+
                 if (betAConfig.name === type) {
                     activeNumbersA = getOutsideNumbers(type, val);
                     lastMovedBet = 'A';
@@ -598,15 +622,17 @@
                 if (newNums) activeNumbers = newNums;
                 updateBoardHighlight();
             } else if (activeMode === 'mutual') {
-                // Determine target bet based on overlap rules
-                let target = lastMovedBet;
-                const inA = activeNumbersA.includes(num);
-                const inB = activeNumbersB.includes(num);
+                // If dragging, strictly use the locked bet. Otherwise, calculate based on tap.
+                let target = currentDragBet;
                 
-                if (inA && inB) target = 'A'; // Overlap moves smaller bet (A)
-                else if (inA) target = 'A';
-                else if (inB) target = 'B';
-                // else it's empty, defaults to lastMovedBet
+                if (!target) {
+                    const inA = activeNumbersA.includes(num);
+                    const inB = activeNumbersB.includes(num);
+                    if (inA && inB) target = 'A';
+                    else if (inA) target = 'A';
+                    else if (inB) target = 'B';
+                    else target = lastMovedBet;
+                }
                 
                 const config = (target === 'A') ? betAConfig : betBConfig;
                 const newNums = getInsideNumbers(config.name, num);
@@ -690,7 +716,7 @@
             }
             performSingleSim(true);
             simCount++;
-            simInterval = setTimeout(runNextSimStep, 1000); // 1-second interval
+            simInterval = setTimeout(runNextSimStep, 1000);
         }
 
         function performSingleSim(updateUI) {
@@ -734,7 +760,7 @@
             let numStr = "";
             if (arr.length <= 2) numStr = arr.join(' & ');
             else if (arr.length === 3) numStr = `${arr[0]}, ${arr[1]} & ${arr[2]}`;
-            else if (arr.length > 6) numStr = `${arr[0]}, ${arr[1]}...`; // Truncate huge arrays to fit table
+            else if (arr.length > 6) numStr = `${arr[0]}, ${arr[1]}...`; 
             else numStr = arr.join(', ');
             return `${name} ${numStr}`;
         }
