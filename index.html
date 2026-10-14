@@ -134,4 +134,674 @@
                     <div class="outside-cell red-cell" id="out-red" data-cat="outside" data-type="Red & Black" data-val="Red">RED</div>
                     <div class="outside-cell black-cell" id="out-black" data-cat="outside" data-type="Red & Black" data-val="Black">BLACK</div>
                     <div class="outside-cell neutral-cell" id="out-odd" data-cat="outside" data-type="Odd & Even" data-val="Odd">ODD</div>
-                    <div class="outside-cell neutral-cell" id="out-19-36" data-cat="outside" data-type="
+                    <div class="outside-cell neutral-cell" id="out-19-36" data-cat="outside" data-type="1 to 18 & 19 to 36" data-val="19-36">19 to 36</div>
+                </div>
+                <div class="outside-col">
+                    <div class="outside-cell neutral-cell" id="out-1st12" data-cat="outside" data-type="Dozen" data-val="1st12">1st 12</div>
+                    <div class="outside-cell neutral-cell" id="out-2nd12" data-cat="outside" data-type="Dozen" data-val="2nd12">2nd 12</div>
+                    <div class="outside-cell neutral-cell" id="out-3rd12" data-cat="outside" data-type="Dozen" data-val="3rd12">3rd 12</div>
+                </div>
+            </div>
+            <!-- Inside Bets -->
+            <div class="inside-bets-container">
+                <div class="board-row">
+                    <div class="board-cell zero-cell" id="cell-0" data-cat="inside" data-num="0">0</div>
+                    <div class="board-cell zero-cell" id="cell-37" data-cat="inside" data-num="37">00</div>
+                </div>
+                <div id="numbers-grid-container"></div>
+            </div>
+        </div>
+
+        <div class="controls-row">
+            <button id="btn-place-bet" style="background-color: var(--highlight); color: black; font-weight: bold;">Place Bet</button>
+            <button onclick="showScreen('screen-intro-bets')">Back to Menu</button>
+        </div>
+    </div>
+
+    <!-- Intro Wheel Spin -->
+    <div id="screen-wheel" class="screen">
+        <h2>Spinning...</h2>
+        <div class="wheel-result red-cell" id="wheel-result">--</div>
+        <h3 id="spin-outcome-text"></h3>
+        <div class="controls-row">
+            <button id="btn-next-bet" onclick="finishIntroSpin()" style="display:none; background-color: var(--highlight); color: black;">Continue</button>
+        </div>
+    </div>
+
+    <!-- Mutual Exclusivity Simulation -->
+    <div id="screen-simulation" class="screen">
+        <h2>Simulating 100 Spins</h2>
+        <div class="wheel-result red-cell" id="sim-wheel-result">--</div>
+        <h3 id="sim-spin-outcome"></h3>
+        <h4 id="sim-spin-counter" style="color:var(--highlight);">Spin: 0 / 100</h4>
+        <div class="controls-row">
+            <button onclick="skipSimulation()" style="background-color: var(--roulette-red);">Skip to End</button>
+        </div>
+    </div>
+
+    <!-- Mutual Exclusivity Results -->
+    <div id="screen-results" class="screen">
+        <h2>Simulation Results</h2>
+        <table class="results-table">
+            <thead>
+                <tr>
+                    <th></th>
+                    <th>Count</th>
+                    <th>Experimental Probability</th>
+                </tr>
+            </thead>
+            <tbody id="results-tbody">
+                <!-- Rows injected via JS -->
+            </tbody>
+        </table>
+        <h3 id="results-net" style="margin-top: 20px; color: var(--highlight);"></h3>
+        <div class="controls-row">
+            <button onclick="showScreen('screen-main')">Return to Main Menu</button>
+        </div>
+    </div>
+
+    <script>
+        // --- Helpers & Constant Data ---
+        function getOddNumbers() { return Array.from({length: 36}, (_, i) => i + 1).filter(n => n % 2 !== 0); }
+        function getRange(start, end) { return Array.from({length: end - start + 1}, (_, i) => i + start); }
+        function getColumn(start) { return Array.from({length: 12}, (_, i) => start + (i * 3)); }
+        function isRed(num) { return redNumbers.includes(num); }
+        function getColorClass(num) {
+            if (num === 0 || num === 37) return 'zero-cell';
+            return isRed(num) ? 'red-cell' : 'black-cell';
+        }
+        function getNumDisplay(num) { return num === 37 ? '00' : num.toString(); }
+
+        const redNumbers = [1,3,5,7,9,12,14,16,18,19,21,23,25,27,30,32,34,36];
+        
+        const betTypes = [
+            { name: "Red & Black", payout: 1, default: redNumbers },
+            { name: "Odd & Even", payout: 1, default: getOddNumbers() },
+            { name: "1 to 18 & 19 to 36", payout: 1, default: getRange(1, 18) },
+            { name: "Dozen", payout: 2, default: getRange(1, 12) },
+            { name: "Column", payout: 2, default: getColumn(1) },
+            { name: "Double Street/Line", payout: 5, default: getRange(1, 6) },
+            { name: "Corner/Square", payout: 8, default: [1, 2, 4, 5] },
+            { name: "Street", payout: 11, default: [1, 2, 3] },
+            { name: "Split", payout: 17, default: [1, 2] },
+            { name: "Straight-Up", payout: 35, default: [1] }
+        ];
+
+        const descriptions = {
+            'intro': "An asynchronous activity meant to serve as an introduction to roulette where students will learn how the different bets in roulette work.",
+            'mutual': "An app that will help you conceptually visualize which bets in roulette are mutually exclusive with each other. It will also allow you to run simulations to estimate the probabilities of the unions and intersections of various bets.",
+            'expected': "An app that will run simulations to help you estimate the expected values of various bets.",
+            'conditional': "An app that will run simulations to help you estimate the conditional probabilities of various bets.",
+            'sandbox': "An app that will let you bet as much as you want on roulette. The app will track your lifetime earnings (or losses)."
+        };
+
+        // --- Core State Variables ---
+        let bank = 10;
+        let activeMode = null;
+        let completedIntroBets = [];
+        let splitMode = 'horizontal'; 
+        
+        let selectedBetType = null;
+        let activeNumbers = [];
+        
+        let selectedMutualBets = [];
+        let betAConfig = null;
+        let betBConfig = null;
+        let activeNumbersA = [];
+        let activeNumbersB = [];
+        let lastMovedBet = 'A';
+        let currentDragBet = null; 
+
+        let simCount = 0;
+        let simResults = { aWin: 0, bWin: 0, bothWin: 0, eitherWin: 0, totalNet: 0 };
+        let simInterval = null;
+        let skipSimFlag = false;
+
+        window.onload = () => { buildNumbersGrid(); };
+
+        // --- Navigation & UI ---
+        function showScreen(screenId) {
+            document.querySelectorAll('.screen').forEach(s => s.classList.remove('active-screen'));
+            document.getElementById(screenId).classList.add('active-screen');
+            document.getElementById('bank-display-intro').innerText = `Bank: $${bank}`;
+            document.getElementById('bank-display-board').innerText = `Bank: $${bank}`;
+        }
+
+        function selectMode(mode) {
+            activeMode = mode;
+            document.getElementById('mode-description').style.display = 'block';
+            document.getElementById('desc-text').innerText = descriptions[mode];
+        }
+
+        function beginGame() {
+            if (activeMode === 'intro') {
+                document.getElementById('bet-menu-title').innerText = "Introduction to Roulette";
+                document.getElementById('bet-menu-desc').innerText = "Select a bet to learn how it works.";
+                document.getElementById('mutual-confirm-container').style.display = 'none';
+                renderBetMenu();
+                showScreen('screen-intro-bets');
+            } else if (activeMode === 'mutual') {
+                selectedMutualBets = [];
+                document.getElementById('bet-menu-title').innerText = "Mutual Exclusivity";
+                document.getElementById('bet-menu-desc').innerText = "Select exactly TWO bets to compare.";
+                document.getElementById('mutual-confirm-container').style.display = 'none';
+                renderBetMenu();
+                showScreen('screen-intro-bets');
+            } else {
+                alert("This mode is currently under development.");
+            }
+        }
+
+        function renderBetMenu() {
+            const container = document.getElementById('bet-buttons-container');
+            container.innerHTML = '';
+            betTypes.forEach(bet => {
+                const btn = document.createElement('button');
+                btn.innerText = bet.name;
+                
+                if (activeMode === 'intro') {
+                    if (completedIntroBets.includes(bet.name)) btn.disabled = true;
+                    else btn.onclick = () => setupIntroBoard(bet);
+                } else if (activeMode === 'mutual') {
+                    if (selectedMutualBets.includes(bet.name)) {
+                        btn.classList.add('btn-selected');
+                    }
+                    btn.onclick = () => {
+                        if (selectedMutualBets.includes(bet.name)) {
+                            selectedMutualBets = selectedMutualBets.filter(b => b !== bet.name);
+                        } else if (selectedMutualBets.length < 2) {
+                            selectedMutualBets.push(bet.name);
+                        }
+                        renderBetMenu();
+                        document.getElementById('mutual-confirm-container').style.display = 
+                            (selectedMutualBets.length === 2) ? 'flex' : 'none';
+                    };
+                }
+                container.appendChild(btn);
+            });
+        }
+
+        function buildNumbersGrid() {
+            const container = document.getElementById('numbers-grid-container');
+            container.innerHTML = '';
+            for (let r = 0; r < 12; r++) {
+                const row = document.createElement('div');
+                row.className = 'board-row';
+                for (let c = 1; c <= 3; c++) {
+                    const num = r * 3 + c;
+                    const cell = document.createElement('div');
+                    cell.className = `board-cell ${getColorClass(num)}`;
+                    cell.innerText = num;
+                    cell.id = `cell-${num}`;
+                    cell.setAttribute('data-cat', 'inside');
+                    cell.setAttribute('data-num', num.toString());
+                    row.appendChild(cell);
+                }
+                container.appendChild(row);
+            }
+            attachInteractionListeners();
+        }
+
+        function setupIntroBoard(betConfig) {
+            selectedBetType = betConfig;
+            activeNumbers = [...betConfig.default];
+            document.getElementById('current-bet-title').innerText = betConfig.name;
+            document.getElementById('split-controls').style.display = (betConfig.name === 'Split') ? 'flex' : 'none';
+            document.getElementById('btn-place-bet').innerText = "Place Bet";
+            document.getElementById('btn-place-bet').onclick = placeIntroBet;
+            showScreen('screen-board');
+            updateBoardHighlight();
+        }
+
+        function setupMutualBoard() {
+            const b1 = betTypes.find(b => b.name === selectedMutualBets[0]);
+            const b2 = betTypes.find(b => b.name === selectedMutualBets[1]);
+            
+            if (b1.default.length <= b2.default.length) {
+                betAConfig = b1; betBConfig = b2;
+            } else {
+                betAConfig = b2; betBConfig = b1;
+            }
+            
+            activeNumbersA = [...betAConfig.default];
+            activeNumbersB = [...betBConfig.default];
+            lastMovedBet = 'A'; 
+            currentDragBet = null;
+            
+            document.getElementById('current-bet-title').innerText = `${betAConfig.name} vs ${betBConfig.name}`;
+            document.getElementById('split-controls').style.display = 
+                (betAConfig.name === 'Split' || betBConfig.name === 'Split') ? 'flex' : 'none';
+            
+            document.getElementById('btn-place-bet').innerText = "Simulate 100 Spins";
+            document.getElementById('btn-place-bet').onclick = startSimulation;
+            
+            showScreen('screen-board');
+            updateBoardHighlight();
+        }
+
+        function updateBoardHighlight() {
+            document.querySelectorAll('.board-cell, .outside-cell').forEach(cell => {
+                cell.classList.remove('highlighted', 'highlight-a', 'highlight-b', 'highlight-overlap');
+            });
+
+            if (activeMode === 'intro') {
+                activeNumbers.forEach(num => {
+                    const cell = document.getElementById(`cell-${num}`);
+                    if (cell) cell.classList.add('highlighted');
+                });
+                applyOutsideHighlight(selectedBetType.name, activeNumbers, 'highlighted');
+            } else if (activeMode === 'mutual') {
+                activeNumbersA.forEach(num => {
+                    const c = document.getElementById(`cell-${num}`);
+                    if(c) c.classList.add('highlight-a');
+                });
+                activeNumbersB.forEach(num => {
+                    const c = document.getElementById(`cell-${num}`);
+                    if(c) {
+                        if (c.classList.contains('highlight-a')) {
+                            c.classList.remove('highlight-a');
+                            c.classList.add('highlight-overlap');
+                        } else {
+                            c.classList.add('highlight-b');
+                        }
+                    }
+                });
+                applyOutsideHighlight(betAConfig.name, activeNumbersA, 'highlight-a');
+                applyOutsideHighlight(betBConfig.name, activeNumbersB, 'highlight-b');
+            }
+        }
+
+        function applyOutsideHighlight(configName, nums, cssClass) {
+            if (configName === '1 to 18 & 19 to 36') {
+                if (nums.includes(1) && nums.includes(18)) document.getElementById('out-1-18').classList.add(cssClass);
+                else if (nums.includes(19) && nums.includes(36)) document.getElementById('out-19-36').classList.add(cssClass);
+            } else if (configName === 'Odd & Even') {
+                if (nums.includes(1)) document.getElementById('out-odd').classList.add(cssClass);
+                else if (nums.includes(2)) document.getElementById('out-even').classList.add(cssClass);
+            } else if (configName === 'Red & Black') {
+                if (nums.includes(1)) document.getElementById('out-red').classList.add(cssClass);
+                else if (nums.includes(2)) document.getElementById('out-black').classList.add(cssClass);
+            } else if (configName === 'Dozen') {
+                if (nums.includes(1)) document.getElementById('out-1st12').classList.add(cssClass);
+                else if (nums.includes(13)) document.getElementById('out-2nd12').classList.add(cssClass);
+                else if (nums.includes(25)) document.getElementById('out-3rd12').classList.add(cssClass);
+            }
+        }
+
+        // --- Interaction Logic ---
+        let interactTimer = null;
+        let isDragging = false;
+        let startCell = null;
+        let currentPointerId = null;
+
+        function attachInteractionListeners() {
+            const cells = document.querySelectorAll('.board-cell, .outside-cell');
+            cells.forEach(cell => {
+                cell.addEventListener('pointerdown', (e) => {
+                    if (e.button !== 0 && e.pointerType === 'mouse') return;
+                    startCell = e.currentTarget;
+                    currentPointerId = e.pointerId;
+                    isDragging = false;
+                    currentDragBet = null;
+                    
+                    if (interactTimer) clearTimeout(interactTimer);
+                    interactTimer = setTimeout(() => {
+                        isDragging = true;
+                        
+                        if (activeMode === 'mutual') {
+                            const cat = startCell.getAttribute('data-cat');
+                            if (cat === 'inside') {
+                                const num = parseInt(startCell.getAttribute('data-num'));
+                                const inA = activeNumbersA.includes(num);
+                                const inB = activeNumbersB.includes(num);
+                                if (inA && inB) currentDragBet = 'A';
+                                else if (inA) currentDragBet = 'A';
+                                else if (inB) currentDragBet = 'B';
+                                else currentDragBet = lastMovedBet;
+                            } else if (cat === 'outside') {
+                                currentDragBet = lastMovedBet;
+                            }
+                        }
+
+                        if (navigator.vibrate) navigator.vibrate(30);
+                        startCell.style.transform = "scale(0.9)";
+                        setTimeout(() => { if(startCell) startCell.style.transform = ""; }, 150);
+                        applyInteractionFromElement(startCell);
+                    }, 300);
+                });
+            });
+        }
+
+        window.addEventListener('pointermove', (e) => {
+            if (!isDragging || e.pointerId !== currentPointerId) return;
+            const el = document.elementFromPoint(e.clientX, e.clientY);
+            if (!el) return;
+            const targetCell = el.closest('.board-cell, .outside-cell');
+            if (targetCell && targetCell !== startCell) {
+                applyInteractionFromElement(targetCell);
+                startCell = targetCell; 
+            }
+        });
+
+        window.addEventListener('pointerup', (e) => {
+            if (e.pointerId !== currentPointerId) return;
+            if (interactTimer) { clearTimeout(interactTimer); interactTimer = null; }
+            if (isDragging) { 
+                isDragging = false; 
+            } else if (startCell) {
+                const el = document.elementFromPoint(e.clientX, e.clientY);
+                const targetCell = el ? el.closest('.board-cell, .outside-cell') : null;
+                if (targetCell === startCell) applyInteractionFromElement(startCell);
+            }
+            startCell = null;
+            currentPointerId = null;
+            currentDragBet = null; 
+        });
+
+        window.addEventListener('pointercancel', (e) => {
+            if (e.pointerId !== currentPointerId) return;
+            if (interactTimer) clearTimeout(interactTimer);
+            isDragging = false; startCell = null; currentPointerId = null; currentDragBet = null;
+        });
+
+        function applyInteractionFromElement(el) {
+            const cat = el.getAttribute('data-cat');
+            if (cat === 'inside') {
+                const num = parseInt(el.getAttribute('data-num'));
+                handleCellClick(num);
+            } else if (cat === 'outside') {
+                const type = el.getAttribute('data-type');
+                const val = el.getAttribute('data-val');
+                handleOutsideClick(type, val);
+            }
+        }
+
+        function setSplitMode(mode) {
+            splitMode = mode;
+            let smallest = 0;
+            if (activeMode === 'intro') {
+                smallest = Math.min(...activeNumbers);
+                handleCellClick(smallest);
+            } else {
+                if (betAConfig.name === 'Split') {
+                    smallest = Math.min(...activeNumbersA);
+                    lastMovedBet = 'A';
+                    handleCellClick(smallest);
+                }
+                if (betBConfig.name === 'Split') {
+                    smallest = Math.min(...activeNumbersB);
+                    lastMovedBet = 'B';
+                    handleCellClick(smallest);
+                }
+            }
+        }
+
+        // --- Betting Calculation Rules ---
+        function getOutsideNumbers(type, val) {
+            if (type === '1 to 18 & 19 to 36') return (val === '1-18') ? getRange(1, 18) : getRange(19, 36);
+            if (type === 'Dozen') return (val === '1st12') ? getRange(1, 12) : (val === '2nd12') ? getRange(13, 24) : getRange(25, 36);
+            if (type === 'Red & Black') return (val === 'Red') ? [...redNumbers] : getRange(1, 36).filter(n => !isRed(n));
+            if (type === 'Odd & Even') return (val === 'Odd') ? getOddNumbers() : getRange(1, 36).filter(n => n % 2 === 0);
+            return null;
+        }
+
+        function getInsideNumbers(type, num) {
+            const blocksZero = ['Red & Black', 'Odd & Even', '1 to 18 & 19 to 36', 'Dozen', 'Column', 'Double Street/Line', 'Corner/Square'];
+            if ((num === 0 || num === 37) && blocksZero.includes(type)) return null;
+            
+            // Hoisted variables to prevent older browser scoping errors
+            let rs, cr, cc, tl, c, partner;
+
+            switch (type) {
+                case 'Red & Black': return isRed(num) ? [...redNumbers] : getRange(1,36).filter(n => !isRed(n));
+                case 'Odd & Even': return (num % 2 !== 0) ? getOddNumbers() : getRange(1,36).filter(n => n % 2 === 0);
+                case '1 to 18 & 19 to 36': return (num <= 18) ? getRange(1, 18) : getRange(19, 36);
+                case 'Dozen': return getRange((Math.ceil(num / 12) - 1) * 12 + 1, Math.ceil(num / 12) * 12);
+                case 'Column': return getColumn((num % 3 === 0) ? 3 : (num % 3));
+                case 'Straight-Up': return [num];
+                case 'Street':
+                    if (num === 0) return [0, 1, 2];
+                    if (num === 37) return [37, 2, 3];
+                    if (num === 2) return [0, 37, 2];
+                    if (num === 1 || num === 3) return [1, 2, 3];
+                    return getRange((Math.ceil(num / 3) - 1) * 3 + 1, Math.ceil(num / 3) * 3);
+                case 'Double Street/Line':
+                    rs = Math.ceil(num / 3); if (rs === 12) rs = 11;
+                    return getRange((rs - 1) * 3 + 1, (rs + 1) * 3);
+                case 'Corner/Square':
+                    cr = Math.ceil(num / 3); cc = (num % 3 === 0) ? 3 : (num % 3);
+                    if (cc === 3) cc = 2; if (cr === 12) cr = 11;
+                    tl = (cr - 1) * 3 + cc; return [tl, tl+1, tl+3, tl+4];
+                case 'Split':
+                    if (splitMode === 'horizontal') {
+                        if (num === 0 || num === 37) return [0, 37];
+                        c = (num % 3 === 0) ? 3 : (num % 3);
+                        partner = (c === 3) ? num - 1 : num + 1;
+                        return [Math.min(num, partner), Math.max(num, partner)];
+                    } else {
+                        if (num >= 4 && num <= 36) return [num - 3, num];
+                        if (num === 1) return [0, 1];
+                        if (num === 2) return [2, 5];
+                        if (num === 3) return [37, 3]; 
+                        if (num === 0) return [0, 2];
+                        if (num === 37) return [37, 2];
+                    }
+            }
+            return null;
+        }
+
+        function handleOutsideClick(type, val) {
+            if (activeMode === 'intro') {
+                if (selectedBetType.name !== type) return;
+                activeNumbers = getOutsideNumbers(type, val);
+                updateBoardHighlight();
+            } else if (activeMode === 'mutual') {
+                if (currentDragBet === 'A' && betAConfig.name !== type) return;
+                if (currentDragBet === 'B' && betBConfig.name !== type) return;
+
+                if (betAConfig.name === type) {
+                    activeNumbersA = getOutsideNumbers(type, val);
+                    lastMovedBet = 'A';
+                    updateBoardHighlight();
+                } else if (betBConfig.name === type) {
+                    activeNumbersB = getOutsideNumbers(type, val);
+                    lastMovedBet = 'B';
+                    updateBoardHighlight();
+                }
+            }
+        }
+
+        function handleCellClick(num) {
+            if (activeMode === 'intro') {
+                const newNums = getInsideNumbers(selectedBetType.name, num);
+                if (newNums) activeNumbers = newNums;
+                updateBoardHighlight();
+            } else if (activeMode === 'mutual') {
+                let target = currentDragBet;
+                
+                if (!target) {
+                    const inA = activeNumbersA.includes(num);
+                    const inB = activeNumbersB.includes(num);
+                    if (inA && inB) target = 'A';
+                    else if (inA) target = 'A';
+                    else if (inB) target = 'B';
+                    else target = lastMovedBet;
+                }
+                
+                const config = (target === 'A') ? betAConfig : betBConfig;
+                const newNums = getInsideNumbers(config.name, num);
+                if (newNums) {
+                    if (target === 'A') { activeNumbersA = newNums; lastMovedBet = 'A'; }
+                    else { activeNumbersB = newNums; lastMovedBet = 'B'; }
+                    updateBoardHighlight();
+                }
+            }
+        }
+
+        // --- Intro Game Resolution ---
+        function placeIntroBet() {
+            showScreen('screen-wheel');
+            document.getElementById('wheel-result').innerText = '--';
+            document.getElementById('wheel-result').className = 'wheel-result';
+            document.getElementById('spin-outcome-text').innerText = '';
+            document.getElementById('btn-next-bet').style.display = 'none';
+
+            let ticks = 0;
+            const spinInterval = setInterval(() => {
+                const rand = Math.floor(Math.random() * 38);
+                const val = rand === 37 ? 37 : rand;
+                document.getElementById('wheel-result').innerText = getNumDisplay(val);
+                document.getElementById('wheel-result').className = `wheel-result ${getColorClass(val)}`;
+                ticks++;
+                if (ticks > 20) {
+                    clearInterval(spinInterval);
+                    resolveIntroBet(val);
+                }
+            }, 100);
+        }
+
+        function resolveIntroBet(winningNum) {
+            const outcomeEl = document.getElementById('spin-outcome-text');
+            if (activeNumbers.includes(winningNum)) {
+                const winnings = selectedBetType.payout;
+                bank += winnings;
+                outcomeEl.innerText = `You Won $${winnings}!`;
+                outcomeEl.style.color = '#4caf50';
+            } else {
+                bank -= 1;
+                outcomeEl.innerText = `You Lost $1.`;
+                outcomeEl.style.color = 'var(--roulette-red)';
+            }
+            completedIntroBets.push(selectedBetType.name);
+            document.getElementById('btn-next-bet').style.display = 'block';
+        }
+
+        function finishIntroSpin() {
+            if (completedIntroBets.length >= 10) {
+                alert(`Activity Complete! Your final bankroll is $${bank}.`);
+                completedIntroBets = []; bank = 10;
+                showScreen('screen-main');
+            } else {
+                renderBetMenu();
+                showScreen('screen-intro-bets');
+            }
+        }
+
+        // --- Mutual Exclusivity Simulation Engine ---
+        function startSimulation() {
+            simCount = 0;
+            simResults = { aWin: 0, bWin: 0, bothWin: 0, eitherWin: 0, totalNet: 0 };
+            skipSimFlag = false;
+            showScreen('screen-simulation');
+            runNextSimStep();
+        }
+
+        function skipSimulation() {
+            skipSimFlag = true;
+        }
+
+        function runNextSimStep() {
+            if (simCount >= 100 || skipSimFlag) {
+                if (skipSimFlag) {
+                    while(simCount < 100) { performSingleSim(false); simCount++; }
+                }
+                showResultsTable();
+                return;
+            }
+            performSingleSim(true);
+            simCount++;
+            simInterval = setTimeout(runNextSimStep, 1000);
+        }
+
+        function performSingleSim(updateUI) {
+            const rand = Math.floor(Math.random() * 38);
+            const val = rand === 37 ? 37 : rand;
+            const wonA = activeNumbersA.includes(val);
+            const wonB = activeNumbersB.includes(val);
+            
+            let netSpin = 0;
+            if (wonA) { netSpin += betAConfig.payout; simResults.aWin++; } else { netSpin -= 1; }
+            if (wonB) { netSpin += betBConfig.payout; simResults.bWin++; } else { netSpin -= 1; }
+            
+            if (wonA && wonB) simResults.bothWin++;
+            if (wonA || wonB) simResults.eitherWin++;
+            
+            simResults.totalNet += netSpin;
+            bank += netSpin;
+            
+            if (updateUI) {
+                document.getElementById('sim-wheel-result').innerText = getNumDisplay(val);
+                document.getElementById('sim-wheel-result').className = `wheel-result ${getColorClass(val)}`;
+                document.getElementById('sim-spin-counter').innerText = `Spin: ${simCount + 1} / 100`;
+                
+                const outcomeEl = document.getElementById('sim-spin-outcome');
+                if (netSpin > 0) {
+                    outcomeEl.innerText = `You Won $${netSpin}!`;
+                    outcomeEl.style.color = '#4caf50';
+                } else if (netSpin < 0) {
+                    outcomeEl.innerText = `You Lost $${Math.abs(netSpin)}.`;
+                    outcomeEl.style.color = 'var(--roulette-red)';
+                } else {
+                    outcomeEl.innerText = `Broke Even ($0)`;
+                    outcomeEl.style.color = 'white';
+                }
+            }
+        }
+
+        // --- Mutual Exclusivity Formatting & Table Rendering ---
+        function formatBetString(name, nums) {
+            const arr = nums.map(n => getNumDisplay(n));
+            let numStr = "";
+            if (arr.length <= 2) numStr = arr.join(' & ');
+            else if (arr.length === 3) numStr = `${arr[0]}, ${arr[1]} & ${arr[2]}`;
+            else if (arr.length > 6) numStr = `${arr[0]}, ${arr[1]}...`; 
+            else numStr = arr.join(', ');
+            return `${name} ${numStr}`;
+        }
+
+        function showResultsTable() {
+            const tbody = document.getElementById('results-tbody');
+            tbody.innerHTML = '';
+            
+            const rowsData = [
+                { title: `Bet A: ${formatBetString(betAConfig.name, activeNumbersA)}`, count: simResults.aWin },
+                { title: `Bet B: ${formatBetString(betBConfig.name, activeNumbersB)}`, count: simResults.bWin },
+                // Using exact Unicode escapes to prevent file encoding crashes
+                { title: `P( A \u2229 B )`, count: simResults.bothWin },
+                { title: `P( A \u222A B )`, count: simResults.eitherWin }
+            ];
+
+            rowsData.forEach(row => {
+                const tr = document.createElement('tr');
+                const tdTitle = document.createElement('td');
+                tdTitle.innerText = row.title;
+                const tdCount = document.createElement('td');
+                tdCount.innerText = row.count;
+                const tdProb = document.createElement('td');
+                
+                // Format experimental probability to 2 decimal places
+                tdProb.innerText = (row.count / 100).toFixed(2);
+                
+                tr.appendChild(tdTitle);
+                tr.appendChild(tdCount);
+                tr.appendChild(tdProb);
+                tbody.appendChild(tr);
+            });
+            
+            const netDisplay = document.getElementById('results-net');
+            if (simResults.totalNet > 0) {
+                netDisplay.innerText = `Total Gain: +$${simResults.totalNet}`;
+                netDisplay.style.color = '#4caf50';
+            } else if (simResults.totalNet < 0) {
+                netDisplay.innerText = `Total Loss: -$${Math.abs(simResults.totalNet)}`;
+                netDisplay.style.color = 'var(--roulette-red)';
+            } else {
+                netDisplay.innerText = `Total Gain: $0 (Broke Even)`;
+                netDisplay.style.color = 'white';
+            }
+            
+            showScreen('screen-results');
+        }
+    </script>
+</body>
+</html>
